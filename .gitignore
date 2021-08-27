@@ -8,3 +8,5 @@ __pycache__
 node_modules/
 /console_logs
 /agent/compiled_RMS_core.js
+package-lock.json
+.idea/
