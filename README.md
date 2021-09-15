@@ -1,10 +1,4 @@
 
-
-# 啊哈哈哈哈哈~~~ 我的, 都是我的!  
-## tips  
-1. fork出来的项目改不成私有的  
-
-
  
 
 # Runtime Mobile Security (RMS) 📱🔥 #

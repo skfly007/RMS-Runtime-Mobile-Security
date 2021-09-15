@@ -1,11 +1,20 @@
 #!/usr/bin/env node
 
+"use strict"
+
+//用来发送http请求
 const http = require('http');
+//web框架
 const express = require("express")
+//前端页面模板引擎
 const nunjucks = require('nunjucks')
+//http请求体解析中间件
 const bodyParser = require('body-parser');
+
 const frida = require('frida');
-const load = require('frida-load');
+const frida_load = require('frida-load');
+
+//文件读写
 const fs = require('fs');
 const socket_io = require('socket.io');
 const datetime = require('node-datetime');
@@ -18,7 +27,7 @@ const FRIDA_DEVICE_ARGS_OPTIONS=
   'id': 'Device’s serial number'                                
 }
 //PATH files
-const FRIDA_AGENT_PATH = __dirname+"/agent/compiled_RMS_core.js"
+const FRIDA_AGENT_PATH = __dirname+"/agent/RMS_core.js"
 const CONFIG_FILE_PATH = __dirname+"/config/config.json"
 const API_MONITOR_FILE_PATH = __dirname+"/config/api_monitor.json"
 const CUSTOM_SCRIPTS_PATH = __dirname+"/custom_scripts/"
@@ -30,46 +39,46 @@ const TEMPLATE_PATH =__dirname+"/views/templates"
 
 
 //Global variables
-var api = null //contains agent export
-var loaded_classes = []
-var system_classes = []
-var loaded_methods = {}
+let api = null //contains agent export
+let loaded_classes = []
+let system_classes = []
+let loaded_methods = {}
 
-var target_package = ""
-var system_package = ""
-var no_system_package=false 
+let target_package = ""
+let system_package = ""
+let no_system_package=false
 
-var app_list = [] //apps installed on the device
-var mobile_OS="N/A"
-var app_env_info = {} //app env info
+let app_list = [] //apps installed on the device
+let mobile_OS="N/A"
+let app_env_info = {} //app env info
 
 
 //Global variables - diff analysis
-var current_loaded_classes = []
-var new_loaded_classes = []
+let current_loaded_classes = []
+let new_loaded_classes = []
 
 //Global variables - console output
-var calls_console_output = ""
-var hooks_console_output = ""
-var heap_console_output = ""
-var global_console_output = ""
-var api_monitor_console_output = ""
-var static_analysis_console_output = ""
+let calls_console_output = ""
+let hooks_console_output = ""
+let heap_console_output = ""
+let global_console_output = ""
+let api_monitor_console_output = ""
+let static_analysis_console_output = ""
 
-//Global variables - call stack 
-var call_count = 0
-var call_count_stack={}
-var methods_hooked_and_executed = []
+//Global variables - call stack
+let call_count = 0
+let call_count_stack={}
+let methods_hooked_and_executed = []
 
 //app instance
 const app = express();
 // server instance
 const server = http.createServer(app);
 // socket listen
-const io=socket_io(server);
+const global_socket_io=socket_io(server);
 
 //bind socket_io to app
-app.set('socket_io', io);
+app.set('socket_io', global_socket_io);
 
 //express post config
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -89,7 +98,6 @@ Server startup
 */
 
 server.listen(5000, () => {
-
   console.log("")
   console.log("_________________________________________________________")
   console.log("RMS - Runtime Mobile Security")
@@ -100,10 +108,10 @@ server.listen(5000, () => {
   console.log("")
 
   console.log("Running on http://127.0.0.1:5000/ (Press CTRL+C to quit)");
-  
+
 });
 
-io.on('connection', (socket) => {
+global_socket_io.on('connection', (socket) => {
   console.log('Socket connected');
 
   socket.on('disconnect', () => {
@@ -118,7 +126,7 @@ Templates
 */
 
 //{{stacktrace}} placeholder is managed nodejs side
-template_massive_hook_Android = `
+const template_massive_hook_Android = `
 Java.perform(function () {
     var classname = "{className}";
     var classmethod = "{classMethod}";
@@ -144,7 +152,7 @@ Java.perform(function () {
 });
 `
 
-template_massive_hook_iOS = `
+const template_massive_hook_iOS = `
 var classname = "{className}";
 var classmethod = "{classMethod}";
 var methodsignature = "{methodSignature}";
@@ -183,7 +191,7 @@ try {
 }
 `
 
-template_hook_lab_Android = `
+const template_hook_lab_Android = `
 Java.perform(function () {
     var classname = "{className}";
     var classmethod = "{classMethod}";
@@ -212,7 +220,7 @@ Java.perform(function () {
 });
 `
 
-template_hook_lab_iOS = `
+const template_hook_lab_iOS = `
 var classname = "{className}";
 var classmethod = "{classMethod}";
 var methodsignature = "{methodSignature}";
@@ -257,7 +265,7 @@ try {
 }
 `
 
-template_heap_search_Android = `
+const template_heap_search_Android = `
 Java.performNow(function () {
     var classname = "{className}"
     var classmethod = "{classMethod}";
@@ -306,7 +314,7 @@ Java.performNow(function () {
 `
 
 
-template_heap_search_iOS = `
+const template_heap_search_iOS = `
 var classname = "{className}";
 var classmethod = "{classMethod}";
 var methodsignature = "{methodSignature}";
@@ -356,7 +364,8 @@ Device - TAB
 */
 
 app.get("/", async function(req, res){
-  const config = read_json_file(CONFIG_FILE_PATH)
+  const config =
+      read_json_file(CONFIG_FILE_PATH)
 
   let custom_scripts_Android = []
   let custom_scripts_iOS = []
@@ -377,7 +386,7 @@ app.get("/", async function(req, res){
         device = await frida.getUsbDevice()
         break;
       case "Remote":
-        device = await device_manager.addRemoteDevice(config.device_args.host)        
+        device = await device_manager.addRemoteDevice(config.device_args.host)
         break;
       case "ID":
         device= await device_manager.getDevice(config.device_args.id)
@@ -437,7 +446,6 @@ app.get("/", async function(req, res){
 
 
 app.post("/", async function(req, res){
-
   //output reset
   reset_variables_and_output()
 
@@ -464,7 +472,7 @@ app.post("/", async function(req, res){
   //obtain device OS
   mobile_OS = req.body.mobile_OS
 
-  //set the proper system package 
+  //set the proper system package
   if(mobile_OS=="Android")
     system_package=config.system_package_Android
   else
@@ -479,7 +487,7 @@ app.post("/", async function(req, res){
 
   //setup the RMS run
   const mode = req.body.mode
-  const frida_script = req.body.frida_startup_script 
+  const frida_script = req.body.frida_startup_script
   const api_selected = req.body.api_selected
 
   //RMS overview - print run options
@@ -488,15 +496,16 @@ app.post("/", async function(req, res){
     console.log("Package Name: " + target_package)
   if(mode)
     console.log("Mode: " + mode)
-  if(frida_script) 
+  if(frida_script)
     console.log("Frida Startup Script: \n" + frida_script)
-  else 
+  else
     console.log("Frida Startup Script: None")
   if(api_selected)
     console.log("APIs Monitors: \n" + api_selected)
   else
     console.log("APIs Monitors: None")
-  
+
+  //手机上没有启动frida-server的时候, 可以查询设备信息和当前APP列表, 但是没有办法进行hook
   var device=null
   //get device
   try
@@ -526,18 +535,20 @@ app.post("/", async function(req, res){
 
   //spawn/attach the app/gadget
   let session, script;
-  try 
+  try
   {
-    //attaching a persistent process to get enumerateLoadedClasses() result before starting the target app 
+    //attaching a persistent process to get enumerateLoadedClasses() result before starting the target app
     //default process are com.android.systemui/SpringBoard
     session = await device.attach(system_package)
-    const frida_agent = await	load(require.resolve(FRIDA_AGENT_PATH));
+    const frida_agent = await frida_load(require.resolve(FRIDA_AGENT_PATH));
     script = await session.createScript(frida_agent)
     await script.load()
     api = await script.exports
     system_classes = await api.loadclasses()
     //sort list alphabetically
-    system_classes.sort()
+    system_classes.sort()   //hook com.android.systemui这个主要是为了获取系统类, 这样在后期hook的时候, 可以忽略相关的系统类
+    // 此时已经可以释放对 com.android.systemui的hook了
+    await session.detach(true);
   }
   catch(err)
   {
@@ -549,7 +560,7 @@ app.post("/", async function(req, res){
   }
 
   session = null
-  pid=null
+  let pid=null
   try
   {
     if (mode == "Spawn" && target_package!="Gadget")
@@ -567,19 +578,41 @@ app.post("/", async function(req, res){
           if(p.identifier==target_package)
             target_package=p.name
         });
-      }        
-      session = await device.attach(target_package)
+      }
+      try
+      {
+        session = await device.attach(target_package);
+      }
+      catch(err)
+      {
+        //使用进程名进行hook
+        app_list = await device.enumerateApplications();
+        let targetApp=null;
+        for(let currApp of app_list)
+        {
+          if(currApp.identifier===target_package)
+          {
+            console.log("使用进程名进行hook  identifier="+currApp.identifier+",name="+currApp.name+",pid="+currApp.pid);
+            targetApp=currApp;
+            break;
+          }
+        }
+        session = await device.attach(targetApp.name);
+      }
+      //let pid=await device.getPid(target_package);
       console.log('[*] Process Attached')
     }
 
-    const frida_agent = await	load(require.resolve(FRIDA_AGENT_PATH));
+    let tmpPath=require.resolve(FRIDA_AGENT_PATH);
+    //const frida_agent = await frida_load(tmpPath);
+    const frida_agent= fs.readFileSync(tmpPath, 'utf8');
     script = await session.createScript(frida_agent)
 
-    //crash handling 
+    //crash handling
     device.processCrashed.connect(onProcessCrashed);
     session.detached.connect(onSessionDetached);
 
-    //onMessage 
+    //onMessage
     script.message.connect(onMessage);
 
     await script.load()
@@ -589,7 +622,7 @@ app.post("/", async function(req, res){
 
     if (mode == "Spawn" && target_package!="Gadget")
       device.resume(pid)
-    
+
     //loading FRIDA startup script if selected by the user
     if (frida_script)
       await api.loadcustomfridascript(frida_script)
@@ -600,12 +633,12 @@ app.post("/", async function(req, res){
       //load API Monitors list
       const api_monitor = read_json_file(API_MONITOR_FILE_PATH)
       var api_to_hook=[]
-    
+
       api_monitor.forEach(function(e) {
         if(api_selected.includes(e.Category))
         api_to_hook.push(e)
       });
-      
+
       //load APIs monitors
       try
       {
@@ -616,7 +649,7 @@ app.post("/", async function(req, res){
         console.log("Excpetion: "+err)
       }
     }
-  
+
   }//end try
   catch(err)
   {
@@ -653,9 +686,9 @@ Static Analysis - TAB (iOS only)
 app.get("/static_analysis", async function(req, res){
 
   //obtain static analysis script path
-  static_analysis_script_path=CUSTOM_SCRIPTS_PATH+ mobile_OS +"/static_analysis.js"
+  let static_analysis_script_path=CUSTOM_SCRIPTS_PATH+ mobile_OS +"/static_analysis.js"
   //read the script
-  static_analysis_script = fs.readFileSync(static_analysis_script_path, 'utf8')
+  let static_analysis_script = fs.readFileSync(static_analysis_script_path, 'utf8')
   //run it via the loadcustomfridascript api
   try
   {
@@ -665,7 +698,7 @@ app.get("/static_analysis", async function(req, res){
   {
     console.log(err)
   }
-  
+
 
   let template = {
     mobile_OS: mobile_OS,
@@ -694,11 +727,11 @@ app.get("/dump", async function(req, res){
     loaded_classes = []
     loaded_methods = []
     //check if the user is trying to filter loaded classes
-    filter = req.query.filter
+    let filter = req.query.filter
     //Checking options
-    regex=0
-    case_sensitive=0
-    whole_world=0
+    let regex=0
+    let case_sensitive=0
+    let whole_world=0
 
     if(req.query.regex==1) regex=1
     if(req.query.case==1) case_sensitive=1
@@ -706,10 +739,7 @@ app.get("/dump", async function(req, res){
 
     if (filter)
     {
-      hooked_classes = await api.loadclasseswithfilter(filter, 
-                                                 regex, 
-                                                 case_sensitive, 
-                                                 whole_world)
+      let hooked_classes = await api.loadclasseswithfilter(filter,regex, case_sensitive, whole_world)
       loaded_classes = hooked_classes
     }
     else
@@ -717,13 +747,13 @@ app.get("/dump", async function(req, res){
       loaded_classes = await api.loadclasses()
       //Checking current loaded classes
       /*
-      perform --> loaded classes - 
+      perform --> loaded classes -
                   system classes =
                   ______________________
                   current_loaded_classes
       */
-     loaded_classes=loaded_classes.filter(function(x) 
-      { 
+     loaded_classes=loaded_classes.filter(function(x)
+      {
         return system_classes.indexOf(x) < 0;
       });
     }
@@ -741,10 +771,10 @@ app.get("/dump", async function(req, res){
       loaded_methods = await api.loadmethods(loaded_classes)
       //console.log(loaded_methods)
     }
-    catch (err) {
+    catch (err)
+    {
       console.log("Excpetion: "+err)
-      
-      msg="FRIDA crashed while loading methods for one or more classes selected. Try to exclude them from your search!"
+      let msg="FRIDA crashed while loading methods for one or more classes selected. Try to exclude them from your search!"
       console.log(msg)
 
       return res.redirect('/?frida_crash=True&frida_crash_message='+err);
@@ -754,12 +784,12 @@ app.get("/dump", async function(req, res){
   {
     //--> Hook all loaded classes and methods
 
-    current_template=""
+    let current_template=""
     if (mobile_OS=="Android")
         current_template=template_massive_hook_Android
     else
         current_template=template_massive_hook_iOS
-  
+
     const stacktrace = req.query.stacktrace
     if (stacktrace == "yes")
     {
@@ -772,15 +802,15 @@ app.get("/dump", async function(req, res){
       current_template=current_template.replace("{{stacktrace}}", "")
     try
     {
-      await api.hookclassesandmethods(loaded_classes, 
-                                      loaded_methods, 
+      await api.hookclassesandmethods(loaded_classes,
+                                      loaded_methods,
                                       current_template)
     }
     catch(err)
     {
       console.log("Excpetion: "+err)
-      
-      msg="FRIDA crashed while hooking methods for one or more classes selected. Try to exclude them from your search!"
+
+      let msg="FRIDA crashed while hooking methods for one or more classes selected. Try to exclude them from your search!"
       console.log(msg)
 
       return res.redirect('/?frida_crash=True&frida_crash_message='+err);
@@ -804,14 +834,14 @@ app.get("/dump", async function(req, res){
 
 app.post("/dump", async function(req, res){
   //tohook contains class (index) selected by the user (hooking purposes)
-  array_to_hook = req.body.tohook
+  let array_to_hook = req.body.tohook
   if(!Array.isArray(array_to_hook))
     array_to_hook=[array_to_hook]
 
   if (array_to_hook)
   {
-    hooked_classes = []
-    array_to_hook.forEach(function(index) 
+    let hooked_classes = []
+    array_to_hook.forEach(function(index)
     {
       //hooked classes
       hooked_classes.push(loaded_classes[Number(index)])
@@ -841,14 +871,14 @@ app.get("/diff_classes", async function(req, res){
   {
     //Checking current loaded classes
     /*
-    perform --> loaded classes - 
+    perform --> loaded classes -
                 system classes =
                 ______________________
                 current_loaded_classes
     */
     current_loaded_classes = (await api.loadclasses()).filter(
-      function(x) 
-      { 
+      function(x)
+      {
         return system_classes.indexOf(x) < 0;
       });
 
@@ -859,21 +889,21 @@ app.get("/diff_classes", async function(req, res){
   {
     //Checking NEW loaded classes
     /*
-    perform --> new loaded classes - 
-                old loaded classes - 
+    perform --> new loaded classes -
+                old loaded classes -
                 system classes     =
                 _____________________
                 new_loaded_classes
     */
     new_loaded_classes = (await api.loadclasses()).filter(
-      function(x) 
-      { 
+      function(x)
+      {
         return current_loaded_classes.indexOf(x) < 0;
       }
     );
     new_loaded_classes = new_loaded_classes.filter(
-      function(x) 
-      { 
+      function(x)
+      {
         return system_classes.indexOf(x) < 0;
       }
     );
@@ -907,9 +937,9 @@ function get_hook_lab_template(mobile_OS){
 
 
 app.get("/hook_lab", async function(req, res){
-  
+
   //check if methods are loaded or not
-  if (loaded_methods === undefined || loaded_methods.length == 0) 
+  if (loaded_methods === undefined || loaded_methods.length == 0)
   {
     try{
       loaded_methods = await api.loadmethods(loaded_classes)
@@ -917,7 +947,7 @@ app.get("/hook_lab", async function(req, res){
     }
     catch(err){
       console.log("Excpetion: "+err)
-      
+
       const msg="FRIDA crashed while loading methods for one or more classes selected. Try to exclude them from your search!"
       console.log(msg)
 
@@ -929,20 +959,20 @@ app.get("/hook_lab", async function(req, res){
   var selected_class = ""
 
   //class_index contains the index of the loaded class selected by the user
-  class_index = req.query.class_index 
+  let class_index = req.query.class_index
   if(class_index)
   {
     //get methods of the selected class
-    selected_class = loaded_classes[class_index]        
+    selected_class = loaded_classes[class_index]
     //method_index contains the index of the loaded method selected by the user
-    method_index = req.query.method_index 
+    let method_index = req.query.method_index
     //Only class selected - load heap search template for all the methods
     if (!method_index)
     {
       //hook template generation
       hook_template = await api.generatehooktemplate(
-        [selected_class], 
-        loaded_methods, 
+        [selected_class],
+        loaded_methods,
         get_hook_lab_template(mobile_OS)
       )
     }
@@ -951,13 +981,13 @@ app.get("/hook_lab", async function(req, res){
     {
       var selected_method={}
       //get method of the selected class
-      selected_method[selected_class] = 
+      selected_method[selected_class] =
         [(loaded_methods[selected_class])[method_index]]
 
       //hook template generation
       hook_template = await api.generatehooktemplate(
-          [selected_class], 
-          selected_method, 
+          [selected_class],
+          selected_method,
           get_hook_lab_template(mobile_OS)
       )
     }
@@ -995,7 +1025,7 @@ function get_heap_search_template(mobile_OS){
 app.get("/heap_search", async function(req, res){
 
   //check if methods are loaded or not
-  if (loaded_methods === undefined || loaded_methods.length == 0) 
+  if (loaded_methods === undefined || loaded_methods.length == 0)
   {
     try{
       loaded_methods = await api.loadmethods(loaded_classes)
@@ -1003,7 +1033,7 @@ app.get("/heap_search", async function(req, res){
     }
     catch(err){
       console.log("Excpetion: "+err)
-      
+
       const msg="FRIDA crashed while loading methods for one or more classes selected. Try to exclude them from your search!"
       console.log(msg)
 
@@ -1015,20 +1045,20 @@ app.get("/heap_search", async function(req, res){
   var selected_class = ""
 
   //lass_index contains the index of the loaded class selected by the user
-  class_index = req.query.class_index 
+  let class_index = req.query.class_index
   if(class_index)
   {
     //get methods of the selected class
-    selected_class = loaded_classes[class_index]        
+    selected_class = loaded_classes[class_index]
     //method_index contains the index of the loaded method selected by the user
-    method_index = req.query.method_index 
+    let method_index = req.query.method_index
     //Only class selected - load heap search template for all the methods
     if (!method_index)
     {
       //heap template generation
       heap_template = await api.heapsearchtemplate(
-          [selected_class], 
-          loaded_methods, 
+          [selected_class],
+          loaded_methods,
           get_heap_search_template(mobile_OS)
       )
     }
@@ -1037,12 +1067,12 @@ app.get("/heap_search", async function(req, res){
     {
       var selected_method={}
       //get method of the selected class
-      selected_method[selected_class] = 
+      selected_method[selected_class] =
         [(loaded_methods[selected_class])[method_index]]
       //heap template generation
       heap_template = await api.heapsearchtemplate(
-          [selected_class], 
-          selected_method, 
+          [selected_class],
+          selected_method,
           get_heap_search_template(mobile_OS)
       )
     }
@@ -1104,7 +1134,7 @@ app.post("/api_monitor", async function(req, res){
     console.log("Excpetion: "+err)
     return res.redirect('/?frida_crash=True&frida_crash_message='+err);
   }
- 
+
   let template = {
     mobile_OS: mobile_OS,
     target_package: target_package,
@@ -1124,15 +1154,15 @@ File Manager - TAB
 
 app.get("/file_manager", async function(req, res){
 
-  const path=req.query.path 
-  const download=req.query.download 
+  const path=req.query.path
+  const download=req.query.download
   var files_at_path=""
   var file=""
 
   //check is app_env_info is not loaded yet
-  if (Object.keys(app_env_info).length === 0) 
+  if (Object.keys(app_env_info).length === 0)
     app_env_info=await api.getappenvinfo()
-  
+
   if(path)
   {
     files_at_path=await api.listfilesatpath(path)
@@ -1144,7 +1174,7 @@ app.get("/file_manager", async function(req, res){
     /*
     if(file)
     {
-      file=''.join(map(chr, (file)["data"])) 
+      file=''.join(map(chr, (file)["data"]))
       filename=os.path.basename(os.path.normpath(download))
       //console.log(filename)
       return Response(file,
@@ -1184,7 +1214,7 @@ app.get("/load_frida_script", async function(req, res){
   //Load frida custom scripts inside "custom_scripts" folder
   var custom_scripts = []
 
-  fs.readdirSync(CUSTOM_SCRIPTS_PATH+mobile_OS).forEach(file => 
+  fs.readdirSync(CUSTOM_SCRIPTS_PATH+mobile_OS).forEach(file =>
     {
     if (file.endsWith(".js"))
     custom_scripts.push(file)
@@ -1200,7 +1230,7 @@ app.get("/load_frida_script", async function(req, res){
 
   //check if a custom script has been selected
   if(cs_name){
-    cs_path=CUSTOM_SCRIPTS_PATH+mobile_OS+"/"+ cs_name
+    let cs_path=CUSTOM_SCRIPTS_PATH+mobile_OS+"/"+ cs_name
     cs_file=fs.readFileSync(cs_path, 'utf8')
   }
 
@@ -1214,11 +1244,11 @@ app.get("/load_frida_script", async function(req, res){
     no_system_package: no_system_package
   }
   res.render("load_frida_script.html",template);
-  
+
 })
 
 app.post("/load_frida_script", async function(req, res){
-  script = req.body.frida_custom_script
+  let script = req.body.frida_custom_script
   try
   {
     await api.loadcustomfridascript(script)
@@ -1264,20 +1294,20 @@ app.get("/save_console_logs", async function(req, res){
 
     //create new directory for current logs package_timestamp
     const dt = datetime.create().format('Ymd-HMS')
-    out_path=CONSOLE_LOGS_PATH+"/"+target_package+"_"+dt
+    let out_path=CONSOLE_LOGS_PATH+"/"+target_package+"_"+dt
     fs.mkdirSync(out_path)
 
     //save calls_console_output
-    fs.writeFile(out_path+"/calls_console_output.txt", 
-                 calls_console_output, 
+    fs.writeFile(out_path+"/calls_console_output.txt",
+                 calls_console_output,
                  function(err){
                   if(err)
                     console.log(err);
                   console.log("calls_console_output.txt saved");
     });
     //save hooks_console_output
-    fs.writeFile(out_path+"/hooks_console_output.txt", 
-                 hooks_console_output, 
+    fs.writeFile(out_path+"/hooks_console_output.txt",
+                 hooks_console_output,
                  function(err)
                  {
                   if(err)
@@ -1285,8 +1315,8 @@ app.get("/save_console_logs", async function(req, res){
                   console.log("hooks_console_output.txt saved");
                  });
     //save global_console_output
-    fs.writeFile(out_path+"/global_console_output.txt", 
-                 global_console_output, 
+    fs.writeFile(out_path+"/global_console_output.txt",
+                 global_console_output,
                  function(err)
                  {
                   if(err)
@@ -1296,8 +1326,8 @@ app.get("/save_console_logs", async function(req, res){
     //save api_monitor_console_output - not available on iOS
     if(mobile_OS=="Android")
     {
-      fs.writeFile(out_path+"/api_monitor_console_output.txt", 
-                   api_monitor_console_output, 
+      fs.writeFile(out_path+"/api_monitor_console_output.txt",
+                   api_monitor_console_output,
                    function(err)
                    {
                     if(err)
@@ -1313,7 +1343,7 @@ app.get("/save_console_logs", async function(req, res){
   }
 })
 
-/* 
+/*
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 API - Reset Console Output
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -1330,11 +1360,11 @@ app.get("/reset_console_logs", async function(req, res){
   call_count_stack = {}
   methods_hooked_and_executed = []
 
-  redirect_url = req.query.redirect
+  let redirect_url = req.query.redirect
   //auto redirect the user to the console output page
   return res.redirect(redirect_url);
 })
-/* 
+/*
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 Config File - TAB
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -1352,16 +1382,16 @@ app.all("/config", async function(req, res){
       const system_package_iOS = req.body.system_package_iOS.trim()
       let device_arg_host = req.body.host_value
       let device_arg_id = req.body.id_value
-      
+
       if(!device_arg_host) device_arg_host=""
       if(!device_arg_id) device_arg_id=""
 
-      device_args={
+      let device_args={
         host:device_arg_host,
         id:device_arg_id
       }
 
-      new_config = {}
+      let new_config = {}
       new_config.device_type=device_type
       new_config.system_package_Android=system_package_Android
       new_config.system_package_iOS=system_package_iOS
@@ -1371,7 +1401,7 @@ app.all("/config", async function(req, res){
       console.log(new_config)
 
       //write new config to config.js
-      fs.writeFileSync(CONFIG_FILE_PATH, 
+      fs.writeFileSync(CONFIG_FILE_PATH,
                        JSON.stringify(new_config,null,4));
   }
 
@@ -1382,7 +1412,7 @@ app.all("/config", async function(req, res){
   //read config file
   const config = read_json_file(CONFIG_FILE_PATH)
 
-  error = false
+  let error = false
   if (req.query.error)
       error = true
 
@@ -1399,14 +1429,14 @@ app.all("/config", async function(req, res){
 })
 
 
-/* 
+/*
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 API - eval frida script and redirect
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 */
 app.post("/eval_script_and_redirect", async function(req, res){
-  script = req.body.frida_custom_script
-  redirect_url = req.body.redirect 
+  let script = req.body.frida_custom_script
+  let redirect_url = req.body.redirect
   console.log(script)
   console.log(redirect_url)
   try
@@ -1416,7 +1446,7 @@ app.post("/eval_script_and_redirect", async function(req, res){
   catch(err){
     console.log("Exception: "+err)
   }
-  
+
   //auto redirect the user to the console output page
   return res.redirect(redirect_url);
 })
@@ -1439,7 +1469,7 @@ app.get("/get_frida_custom_script", async function(req, res){
   res.send(custom_script)
 });
 
-/* 
+/*
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 on_message stuff
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -1463,21 +1493,21 @@ function onMessage(message, data) {
     if(message.payload.includes("[API_Monitor]"))
       log_handler("api_monitor",message.payload)
     if(message.payload.includes("[Static_Analysis]"))
-      log_handler("static_analysis",message.payload) 
+      log_handler("static_analysis",message.payload)
     if(!(message.payload.includes("[Call_Stack]")) &&
        !(message.payload.includes("[Hook_Stack]")) &&
        !(message.payload.includes("[Heap_Search]")) &&
        !(message.payload.includes("[API_Monitor]")) &&
        !(message.payload.includes("[Static_Analysis]"))
-      ) 
+      )
       log_handler("global_stack",message.payload)
-  }   
+  }
 }
 
 function log_handler(level, text){
   if(!text) return //needed?
 
-  switch (level) 
+  switch (level)
   {
     case "call_stack":
       //clean up the string
@@ -1495,13 +1525,13 @@ function log_handler(level, text){
       //increase the counter
       call_count += 1
 
-      io.emit(
-      'call_stack', 
+      global_socket_io.emit(
+      'call_stack',
       {
-          'data': "\n"+text, 
+          'data': "\n"+text,
           'level': level
-      }, 
-      namespace='/console'
+      },
+      '/console'
       )
       break;
     case "hook_stack":
@@ -1523,36 +1553,36 @@ function log_handler(level, text){
       text="INFO for INDEX: ["+out_index+"]\n"+text
       hooks_console_output = hooks_console_output + "\n" + text
 
-      io.emit(
+      global_socket_io.emit(
       'hook_stack', 
       {
           'data': "\n"+text, 
           'level': level
       }, 
-      namespace='/console'
+      '/console'
       )
       break;
     case "heap_search":
       text=text.replace("[Heap_Search]\n","")
       heap_console_output = heap_console_output + "\n" + text
-      io.emit(
+      global_socket_io.emit(
       'heap_search', 
       {
           'data': "\n"+text, 
           'level': level
       }, 
-      namespace='/console'
+      '/console'
       )
       break;
     case "api_monitor":
       api_monitor_console_output = api_monitor_console_output + "\n" + text
-      io.emit(
+      global_socket_io.emit(
       'api_monitor', 
       {
           'data': "\n"+text, 
           'level': level
       }, 
-      namespace='/console'
+      '/console'
       )
       break;
     case "static_analysis":
@@ -1564,13 +1594,13 @@ function log_handler(level, text){
 
   //always executed
   global_console_output = global_console_output + "\n" + text
-  io.emit(
+  global_socket_io.emit(
   'global_console', 
   {
       'data': "\n"+text, 
       'level': level
   }, 
-  namespace='/console'
+  '/console'
   )
   //print text
   console.log(text)
