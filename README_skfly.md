@@ -8,6 +8,12 @@
 ## TODO
 1. 增加一个选项记忆功能
 
+2. 第二步筛选结果 应添加 全选/全不选 按钮  
+
+3. 显示类详情? 属于哪个classloader, 内存地址之类的
+
+4. 进行类筛选的时候, 使用的是Java.use(), 没法加载未初始化的类
+
 
 
 ## tips
@@ -20,4 +26,10 @@
    已解决. 用 进程名 替代 包名 进行hook
 
 
+4. 要善用堆搜索, 这个功能太强大了. Java.choose()  idea和xcode甚至lldb调试时应该都有这个功能
 
+5. Java.use();逻辑分析
+   Java.use();返回的是一个 本质上Frida包装对象
+   Java.use("java.lang.String"); 的返回值 相当于java.lang.String
+   想获取对应的Class<?>对象, 需要调用 Java.use("java.lang.String").class
+   但是不论是谁, 本质上都是一个 Frida包装对象

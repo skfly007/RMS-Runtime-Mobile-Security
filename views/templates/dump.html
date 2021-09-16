@@ -8,11 +8,11 @@
 
 <body>
 
-<!-- Model View -->
+<!-- Model View  过滤器对话框 -->
 <div class="modal fade" id="ModalFilterView">
   <div class="modal-dialog modal-lg">
+    <!-- 这是一个弹窗  -->
     <div class="modal-content">
-
       <!-- Modal Header -->
       <div class="modal-header">
         <h4 class="modal-title">Select the Classes that you want to hook</h4>
@@ -27,9 +27,9 @@
             <form class="form-group list-group-item list-group-item-action bg-light" action="/dump" method="get">
               <p>
               <b>Package:</b> {{target_package}} → 
-              <a role="button" href="/dump?choice=1&filter={{target_package}}">✅</a> 
+              <a role="button" href="/dump?choice=1&filter={{target_package}}">✅直接使用包名作为筛选条件</a>
               </p>
-              <label for="filter">Hook all classes that start with:</label>
+              <label for="filter">Hook all classes that start with(如果是正则表达式则不限制必须以[过滤器]开头):</label>
               <input type="text" class="form-control" id="filter" name="filter" required="true"
                 placeholder="com.example., com.external_library, com.test,">
               <input type="hidden" name=choice value=1>
@@ -52,20 +52,18 @@
                 </label>
               </div>
               <small class="form-text text-muted">
-                If Regex is not checked, you can insert multiple filters. Just make sure to use <b><font color=red>,</font></b> to separete the strings you want to use as a filters
+                If Regex is not checked, you can insert multiple filters. Just make sure to use <b><font color=red>,</font></b> to separete the strings you want to use as a filters<br/>
+                最终取这两个筛选器的并集
               </small>
               <br>
-              <button type="submit" class="btn btn-primary mb-2">Submit</button>&nbsp;&nbsp;
+              <button type="submit" class="btn btn-primary mb-2">开始依据上述条件过滤类</button>&nbsp;&nbsp;
               <font color=red><b> NOTE: </b></font>Hooking more than 500 classes can crash the app
             </form>
           </div>
           <br>
           <div class="col-sm-12">
-
             <!-- FORM START -->
-            <form class="form-group list-group-item list-group-item-action bg-light" 
-                  action="/dump" 
-                  method="POST">
+            <form class="form-group list-group-item list-group-item-action bg-light" action="/dump" method="POST">
             <table class="table table-sm table-dark table-bordered">
               <thead>
                 <tr>
@@ -75,10 +73,9 @@
                 </tr>
               </thead>
               <tbody id="MainTable_Filter">
-                <input class="form-control" id="UserInput_Filter" type="text"
-                  placeholder="Use this search bar to quickly filter results:">
+                <input class="form-control" id="UserInput_Filter" type="text" placeholder="浏览器端过滤:">
                 <br>
-                  <button type="submit" class="btn btn-primary mb-2">Hook Selected</button>&nbsp;&nbsp;
+                  <button type="submit" class="btn btn-primary mb-2">通过勾选的方式过滤类</button>&nbsp;&nbsp;
                     <font color=red><b> NOTE: </b></font>Hooking more than 500 classes can crash the app 
                 {% for c in loaded_classes %}
                 <tr>
@@ -87,6 +84,8 @@
                   <td> {{ c }} </td>
                 </tr>
                 {% endfor %}
+                <tr><br/>1. 严格遵循先过滤, 后勾选的步骤</tr>
+                <tr><br/>2. 此处应添加 全选/全不选 按钮</tr>
               </form> <!-- FORM END -->
               </tbody>
             </table>
@@ -108,20 +107,15 @@
 </div>
 
 <!-- Model View -->
-
   <div class="d-flex" id="wrapper">
     <!-- Sidebar -->
     {% include 't_sidebar.html' %}
-
     <!-- Page Content -->
     <div id="page-content-wrapper">
-
       <!-- Navbar -->
       {% include 't_navbar.html' %}
-
-      <!-- Content -->
+      <!-- Content  bootstrap container-fluid 容器 -->
       <div class="container-fluid">
-        
         <!-- Buttons -->
         <div class="col-sm-12">
           <br>
@@ -130,19 +124,19 @@
           <div class="row">
             <div align=center class="col-sm-3 border-top border-right border-left">
               <br>
-              <h1>1</h1>
+              <h1>第一步</h1>
             </div>
             <div align=center class="col-sm-3 border-top border-right border-left">
               <br>
-              <h1>2</h1>
+              <h1>第二步</h1>
             </div>
             <div align=center class="col-sm-3 border-top border-right border-left">
               <br>
-              <h1>3</h1>
+              <h1>第三步</h1>
             </div>
             <div align=center class="col-sm-3 border-top border-right border-left">
               <br>
-              <h1>4</h1>
+              <h1>第四步</h1>
             </div>
           </div>
           <div class="row">
@@ -155,7 +149,7 @@
                 Insert a Filter
               </a>
               <br>
-              <b>(<font color=red>optional</font>)</b>
+              <b>(<font color=red>该步骤可以重复执行多次.可以在上次过滤结果的基础上, 再次过滤</font>)</b>
               <br>
               <font color=red><b> NOTE: </b></font>Hooking more than 500 classes or complex classes can easily crash the app. Use a filter if you receive an error! 😉
               <br>
@@ -178,12 +172,7 @@
         <!-- Buttons -->
         
         <!-- Search Bar and Table -->
-        <div class="col-sm-12 
-                    form-group 
-                    list-group-item 
-                    list-group-item-action 
-                    bg-light
-                    rounded">
+        <div class="col-sm-12 form-group list-group-item list-group-item-action bg-light rounded">
           <table class="table table-sm table-dark table-bordered">
             <thead>
               <tr>
@@ -195,8 +184,8 @@
             <tbody id="MainTable">
               <h3>Classes</h3>
               <p>Use the search bar below to quickly filter results: 
-                {% if loaded_methods|length > 0 %}
-                {% if methods_hooked_and_executed|length > 0 %}
+                {% if loaded_methods|length > 0 %}    <!-- 如果已经进入了 步骤三_加载方法 -->
+                {% if methods_hooked_and_executed|length > 0 %}  <!--  如果已经进入了 步骤四_hook方法  -->
                 <button 
                    onclick="apply_filter('executed')"
                    class="btn btn-success btn-sm">
@@ -220,7 +209,7 @@
                 </button>
               {% endif %}
               </p>
-              <input class="form-control" id="UserInput" type="text" placeholder="Search..">
+              <input class="form-control" id="UserInput" type="text" placeholder="Search..">  <!-- 搜索框  -->
               <br>
               <!-- Legenda -->
               {% if methods_hooked_and_executed|length > 0 %}
@@ -228,8 +217,27 @@
               {% endif %}
               <!-- Legenda -->
               {% for class_name in loaded_classes %}
-              <tr><td><center>{{ loop.index0 }}</center></td><td>{{class_name}}</td>
-                <td><pre>{% if mobile_OS=="Android" %}<code class=Java>{% else %}<code class=obj-c>{% endif %}{% for method_name in loaded_methods[class_name] %}{% if "Class: "+class_name+"\nMethod: "+method_name["ui_name"]+"\n" in methods_hooked_and_executed %}✅ {% endif %}{{method_name["ui_name"]}};<br>{% endfor %}</code></pre></td></tr>{% endfor %}
+              <tr>
+                <td><center>{{ loop.index0 }}</center></td>
+                <td>{{class_name}}</td>
+                <td>
+                  <pre>
+                    {% if mobile_OS=="Android" %}
+                      <code class=Java>
+                    {% else %}
+                      <code class=obj-c>
+                    {% endif %}
+                    {% for method_name in loaded_methods[class_name] %}
+                        {% if "Class: "+class_name+"\nMethod: "+method_name["ui_name"]+"\n" in methods_hooked_and_executed %}
+                          ✅
+                        {% endif %}
+                        {{method_name["ui_name"]}};<br>
+                    {% endfor %}
+                      </code>
+                  </pre>
+                </td>
+              </tr>
+              {% endfor %}
             </tbody>
           </table>
         </div>
