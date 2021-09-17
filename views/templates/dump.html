@@ -209,7 +209,9 @@
                 </button>
               {% endif %}
               </p>
-              <input class="form-control" id="UserInput" type="text" placeholder="Search..">  <!-- 搜索框  -->
+              <!-- 依据关键字进行搜索, 只要类名或类中的某一个方法包含了指定关键字, 就保留这个类的所有方法  -->
+              <!-- 这个过滤结果 当前只是浏览器端过滤, 并没有真正传到后台应用到最终的hook动作 -->
+              <input class="form-control" id="UserInput" type="text" placeholder="Search..">
               <br>
               <!-- Legenda -->
               {% if methods_hooked_and_executed|length > 0 %}

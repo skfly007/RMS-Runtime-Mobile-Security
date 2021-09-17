@@ -59,7 +59,7 @@ let current_loaded_classes = [];
 let new_loaded_classes = [];
 
 //Global variables - console output
-let calls_console_output = "";
+let calls_console_output = "";      //全部 已输出的调用栈内容      主要是为了保存到当前磁盘
 let hooks_console_output = "";
 let heap_console_output = "";
 let global_console_output = "";
@@ -68,8 +68,8 @@ let static_analysis_console_output = "";
 
 //Global variables - call stack
 let call_count = 0;
-let call_count_stack = {};
-let methods_hooked_and_executed = [];
+let call_count_stack = {};      //统计某个方法在所有被hook的方法里面是第几个被调用的
+let methods_hooked_and_executed = [];   //被hook后的, 已经被执行过的方法数组. 去重后的, 主要是为了记录一下, 后续可以在筛选方法的时候显示出来
 
 //app instance
 const app = express();
@@ -651,7 +651,7 @@ app.post("/", async function (req, res)
         device.processCrashed.connect(onProcessCrashed);
         session.detached.connect(onSessionDetached);
 
-        //onMessage
+        //onMessage     //手机端node环境send()函数触发的事件
         script.message.connect(onMessage);
 
         await script.load();
@@ -872,9 +872,8 @@ app.get("/dump", async function (req, res)
         }
         try
         {
-            await api.hookclassesandmethods(loaded_classes,
-                loaded_methods,
-                current_template);
+            //await api.hookclassesandmethods(loaded_classes,loaded_methods,current_template);
+            await api.hookclassesandmethods(loaded_methods,stacktrace==="yes"?true:false);
         }
         catch (err)
         {
@@ -886,7 +885,7 @@ app.get("/dump", async function (req, res)
             return res.redirect('/?frida_crash=True&frida_crash_message=' + err);
         }
 
-        //redirect the user to the console output
+        //redirect the user to the console output       //重定向到日志输出界面
         return res.redirect('/console_output');
     }
 
@@ -1398,7 +1397,7 @@ app.get("/save_console_logs", async function (req, res)
         //check if console_logs exists
         if (!fs.existsSync(CONSOLE_LOGS_PATH))
         {
-            fs.mkdirSync("console_logs");
+            fs.mkdirSync(CONSOLE_LOGS_PATH);
         }
 
         //create new directory for current logs package_timestamp
@@ -1625,6 +1624,7 @@ function onMessage(message, data)
         }
         if (message.payload.includes("[Hook_Stack]"))
         {
+            //方法hook相关日志
             log_handler("hook_stack", message.payload);
         }
         if (message.payload.includes("[Heap_Search]"))
@@ -1664,7 +1664,7 @@ function log_handler(level, text)
             //clean up the string
             text = text.replace("[Call_Stack]\n", "");
             //method hooked has been executed by the app
-            var new_m_executed = text; //text contains Class and Method info
+            let new_m_executed = text; //text contains Class and Method info
             //remove duplicates
             if (!methods_hooked_and_executed.includes(new_m_executed))
             {

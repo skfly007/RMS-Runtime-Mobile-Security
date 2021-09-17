@@ -383,11 +383,91 @@ function load_frida_custom_script_Android(frida_script)
     });
 }
 
-function hook_classes_and_methods_Android(loaded_classes, loaded_methods, template)
+
+const template_massive_hook_Android = `
+Java.perform(function () {
+    var classname = "{className}";
+    var classmethod = "{classMethod}";
+    var methodsignature = "{methodSignature}";
+    var hookclass = Java.use(classname);
+    
+    hookclass.{classMethod}.{overload}implementation = function ({args}) {
+        send("[Call_Stack]\\nClass: " +classname+"\\nMethod: "+methodsignature+"\\n");
+        var ret = this.{classMethod}({args});
+
+        var s="";
+        s=s+"[Hook_Stack]\\n"
+        s=s+"Class: "+classname+"\\n"
+        s=s+"Method: "+methodsignature+"\\n"
+        s=s+"Called by: "+Java.use('java.lang.Exception').$new().getStackTrace().toString().split(',')[1]+"\\n"
+        s=s+"Input: "+eval(args)+"\\n"
+        s=s+"Output: "+ret+"\\n"
+        {{stacktrace}}
+        send(s);
+                
+        return ret;
+    };
+});
+`;
+
+
+function hook_classes_and_methods_Android(loaded_methods, 是否打印调用堆栈 = true)
 {
     Java.perform(function ()
     {
+        console.log("开始逐个hook");
+        for (let currClassName in loaded_methods)
+        {
+            loaded_methods[currClassName].forEach(function (tmpMethodDesObj)
+            {
+                console.log("开始hook: "+tmpMethodDesObj["ui_name"]);
+                let 当前方法名 = tmpMethodDesObj["name"];
+                let targetClazzFW = Java.use(currClassName);
 
+                let java方法参数类型列表=[];
+                if (tmpMethodDesObj["args"] != "\"\"")
+                {
+                    java方法参数类型列表=tmpMethodDesObj["args"].replace(/"/g,"").split(",");
+                }
+
+                //hookclass[classmethod].overload.apply(hookclass[classmethod],["android.os.Bundle"]).implementation = function ()
+                targetClazzFW[当前方法名].overload.apply(targetClazzFW[当前方法名],java方法参数类型列表).implementation = function ()
+                {
+                    send("[Call_Stack]\nClass: " + currClassName + "\nMethod: " + tmpMethodDesObj["ui_name"] + "\n");
+                    //调用原方法
+                    var ret = this[当前方法名].apply(this,arguments);
+                    let s = "";
+                    s = s + "[Hook_Stack]\n";
+                    s = s + "Class: " + currClassName + "\n";
+                    s = s + "Method: " + tmpMethodDesObj["ui_name"] + "\n";
+                    s = s + "Called by: " + Java.use('java.lang.Exception').$new().getStackTrace().toString().split(',')[1] + "\n";
+                    //s = s + "Input: " + eval(arguments) + "\n";
+                    s = s + "Input: ";
+                    for (let j = 0; j < arguments.length; j++)
+                    {
+                        s += "arg[" + j + "]: " + getJavaObjectDesc(arguments[j], java方法参数类型列表[j])+" , ";
+                    }
+                    s += "\n";
+                    s = s + "Output: " + ret + "\n";
+                    if (是否打印调用堆栈)
+                    {
+                        s = s + "StackTrace: " + Java.use('android.util.Log').getStackTraceString(Java.use('java.lang.Exception').$new()).replace('java.lang.Exception', '') + "\n";
+                    }
+                    send(s);
+
+                    return ret;
+                };
+                console.log("hook成功: "+tmpMethodDesObj["ui_name"]);
+            });
+        }
+        console.log("全部hook成功! 共hook"+Object.keys(loaded_methods).length+"个类");
+    });
+}
+
+function hook_classes_and_methods_Android_DEL(loaded_classes, loaded_methods, template)
+{
+    Java.perform(function ()
+    {
         console.log("Hook Template setup");
 
         loaded_classes.forEach(function (clazz)
@@ -446,6 +526,7 @@ function hook_classes_and_methods_Android(loaded_classes, loaded_methods, templa
                 //send(t);
 
                 console.log(clazz + " " + dict["name"] + " hooked!");
+                console.log(t);
                 // ready to eval!
                 eval(t);
             });
@@ -1118,4 +1199,41 @@ function list_files_at_path_iOS(path)
 function api_monitor_iOS(api_to_monitor)
 {
     //STUB
+}
+
+
+
+
+//=================================++=========================================
+
+function getJavaObjectDesc(paramObj, paramType)
+{
+    if (undefined == paramObj || null == paramObj)
+    {
+        return paramObj;
+    }
+
+    var retStr = "\r\n函数原型中指定的对象类型: " + paramType;
+    if ("object" != typeof (paramObj))
+    {
+        retStr += "\r\n[对象类型(js原生): " + typeof (paramObj) + " || 参数信息: " + paramObj + "]";
+    }
+    else
+    {
+        try
+        {
+            retStr += "\r\n[动态获取的对象类型: " + paramObj.getClass().getName(); //后面这种方法总报错 paramObj;
+        }
+        catch (e)
+        {
+            retStr += "\r\n[动态获取的对象类型: 识别异常! 异常信息: " + "e.lineNumber=" + e.lineNumber + '\ne.name=' + e.name + '\ne.message=' + e.message;
+        }
+    }
+
+    //此处还需要判断对象是不是原子类型
+    retStr += "\r\ntempObj.toString()对象描述: " + paramObj;
+//    retStr += "\r\njson对象描述: " + 获取java对象的json描述(paramObj);
+
+    retStr += "\r\n--------------------------------------------------------------------------------------------"
+    return retStr;
 }

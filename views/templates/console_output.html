@@ -8,7 +8,8 @@
 </head>
 
 <body>
-<!-- Model View - start -->
+
+<!-- Model View - start  这是放大后的窗口 -->
 <div class="modal fade" id="ModalZoomedView">
   <div class="modal-dialog modal-xl">
     <div class="modal-content">
@@ -71,16 +72,16 @@
           <a role="button" 
              href="/reset_console_logs?redirect=/console_output" 
              class="btn btn-danger">
-             Reset Console Output
+             清空日志
           </a>
           <button class="btn btn-success" id="save_output">
-          Save Console Output
+          保存日志
           </button>
         </center>
         <br>
         <div class="row">
           <div class="col-sm-6">
-            <h3 align=center>Call Stack Hooked methods
+            <h3 align=center>已hook方法的调用栈
               <button 
                 data-toggle="modal" 
                 data-target="#ModalZoomedView" 
@@ -95,7 +96,7 @@
           </div>
 
           <div class="col-sm-6">
-            <h3 align=center>I/O Hooked methods
+            <h3 align=center>已hook方法的详细调用信息
               <button 
                  data-toggle="modal" 
                  data-target="#ModalZoomedView"
@@ -113,7 +114,7 @@
         <div class="row">
           <div class="col-sm-12">
             <h3 align=center>
-              Global Console Output
+              全部信息
               <button 
                  data-toggle="modal" 
                  data-target="#ModalZoomedView" 
