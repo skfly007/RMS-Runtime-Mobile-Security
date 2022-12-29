@@ -5,6 +5,9 @@
 # 啊哈哈哈哈哈~~~ 我的, 都是我的!
 
 
+## 基本信息
+git clone https://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@github.com/skfly007/RMS-Runtime-Mobile-Security.git
+
 ## TODO
 1. 增加一个选项记忆功能
 

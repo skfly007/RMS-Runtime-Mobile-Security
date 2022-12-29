@@ -21,7 +21,7 @@
 
             {% if target_package %}
 
-                <!-- Dump Page - start -->
+                <!-- Dump Page  主要用来拦截类方法并获取类调用信息 - start -->
                 {% if mobile_OS=="Android" or mobile_OS=="iOS" %}
                 <li class="nav-item border-right">
                     <a class="nav-link" 
@@ -33,7 +33,7 @@
                 {% endif %}
                 <!-- Dump Page - end -->
 
-                <!-- Diff Classes Page - start -->
+                <!-- Diff Classes Page  主要用来分析执行某个功能涉及到的类 - start -->
                 {% if mobile_OS=="Android" or mobile_OS=="iOS" %}
                 <li class="nav-item border-right">
                     <a class="nav-link" 
