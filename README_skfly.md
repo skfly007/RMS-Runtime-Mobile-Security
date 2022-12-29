@@ -21,6 +21,8 @@ git clone https://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@github.com/skfly007/R
 
 6. 存储 被hook的方法调用栈 的逻辑是有问题的
 
+7. 配置默认包名后, 下拉列表消失  
+
 
 ## tips
 1. fork出来的项目改不成私有的  
